@@ -1,9 +1,9 @@
-import os
+# import os
 
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.padding import Padding
-from rich.panel import Panel
+# from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
@@ -25,14 +25,6 @@ console = Console(theme=PASTEL_THEME)
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
 
-def ctx_bar(used: int, total: int) -> str:
-    pct = min(100, used / total * 100) if total else 0
-    w = 20
-    bar = "█" * int(w * pct / 100) + "░" * (w - int(w * pct / 100))
-    c = "green" if pct < 50 else ("yellow" if pct < 80 else "red")
-    return f"[{c}]{bar}[/{c}] {used:,}/{total:,} ({pct:.0f}%)"
-
-
 def build_stream_grid(spinner: Spinner, partial_text: str, tip: Text) -> Table:
     grid = Table.grid()
     grid.add_row(spinner)
@@ -45,38 +37,42 @@ def build_stream_grid(spinner: Spinner, partial_text: str, tip: Text) -> Table:
     return grid
 
 
-def print_welcome(model: str, max_ctx: int, cwd: str) -> None:
-    console.print()
-    console.print(Panel(
-        f"[bold green]{model}[/bold green] · [dim]{max_ctx:,} tokens[/dim]\n"
-        f"[dim]{cwd}[/dim]",
-        title="[bold]Ollama Chat[/bold]",
-        border_style="cyan",
-        padding=(1, 4),
-        expand=True,
-    ))
-    console.print()
+# def print_welcome(model: str, max_ctx: int, cwd: str) -> None:
+#     console.print()
+#     console.print(Panel(
+#         f"[bold green]{model}[/bold green] · [dim]{max_ctx:,} tokens[/dim]\n"
+#         f"[dim]{cwd}[/dim]",
+#         title="[bold]Ollama Chat[/bold]",
+#         border_style="cyan",
+#         padding=(1, 4),
+#         expand=True,
+#     ))
+#     console.print()
 
 
-def print_help() -> None:
-    cmds = [
-        {"cmd": "/help", "desc": "Mostra esta lista de comandos disponíveis"},
-        {"cmd": "/sair, /exit, sair", "desc": "Encerra e sai do chat"},
-        {"cmd": "/limpar, limpar", "desc": "Desanexa todos os arquivos e limpa os envios pendentes"},
-        {"cmd": "/arquivo <caminho>, arquivo:<caminho>", "desc": "Anexa um arquivo ou imagem na mensagem"},
-    ]
-    console.print("  [bold cyan]Comandos e Funções:[/bold cyan]")
-    for c in cmds:
-        console.print(f"  [green]{c['cmd'].ljust(40)}[/green] [dim]{c['desc']}[/dim]")
+def print_help(commands=None) -> None:
+    console.print("[bold cyan]Comandos e Funções:[/bold cyan]")
+    if commands:
+        for cmd in commands:
+            label = ", ".join([cmd.name] + cmd.aliases)
+            console.print(f"  [green]{label.ljust(40)}[/green] [dim]{cmd.description}[/dim]")
     console.print()
 
 
-def print_stats(stats: dict) -> None:
-    tok = stats.get("prompt_eval_count", 0) + stats.get("eval_count", 0)
+def print_stats(stats: dict, used: int = 0, total: int = 0) -> None:
     dur = stats.get("total_duration", 0) / 1e9
     ev = stats.get("eval_duration", 0) / 1e9
     tps = stats.get("eval_count", 0) / ev if ev else 0
-    console.print(f"[dim]  {tok} tokens · {tps:.1f} t/s · {dur:.1f}s[/dim]")
+    left = Text(f"{tps:.1f} t/s · {dur:.1f}s · {used:,}/{total:,}", style="dim")
+   #  if total:
+   #      right = Text(f"tokens {used:,}/{total:,}", style="dim")
+   #      grid = Table.grid(expand=True)
+   #      grid.add_column()
+   #      grid.add_column(justify="right")
+   #      grid.add_row(left, right)
+   #      console.print(grid)
+   #  else:
+    console.print(left)
 
 
 def print_response(response: str) -> None:
@@ -85,8 +81,7 @@ def print_response(response: str) -> None:
 
 
 def print_separator() -> None:
-    sep = "[#444444]" + "─" * console.width + "[/#444444]"
-    console.print(sep)
+    console.rule(style="#444444")
 
 
 def input_prompt(n_attachments: int) -> str:
@@ -105,8 +100,7 @@ def print_user_message(text: str) -> None:
     console.print(Padding(t, (1, 0)))
 
 
-def choose_model() -> str:
-    # Import lazy para evitar circular import (ollama_client importa de ui)
+def choose_model(session) -> str:
     from . import ollama_client
     import msvcrt
     from rich.live import Live
@@ -114,7 +108,7 @@ def choose_model() -> str:
     models = ollama_client.list_models()
 
     if not models:
-        console.print("[yellow]Nenhum modelo encontrado. (Lembre-se: os modelos só aparecem se forem instalados usando 'ollama pull')[/yellow]")
+        console.print("[yellow]Nenhum modelo encontrado. (Os modelos só aparecem se forem instalados através do 'ollama pull')[/yellow]")
         return console.input("  [cyan]Modelo[/cyan] [dim](gemma3:4b)[/dim]: ").strip() or "gemma3:4b"
 
     idx = 0
@@ -143,4 +137,9 @@ def choose_model() -> str:
             elif c == b'\x03':
                 raise KeyboardInterrupt
 
-    return models[idx]
+    new_model = models[idx]
+    session.model = new_model
+    session.max_ctx = ollama_client.get_max_ctx(new_model)
+    console.print(f"[bold green]✓ Modelo ativo:[/bold green] [cyan]{new_model}[/cyan] [dim]({session.max_ctx:,} tokens)[/dim]\n")
+
+    return new_model

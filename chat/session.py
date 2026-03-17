@@ -11,21 +11,22 @@ from .ui import (
     print_separator,
     print_stats,
     print_user_message,
-    print_welcome,
+   #  print_welcome,
 )
 
 
 class ChatSession:
     def __init__(self) -> None:
-        self.model: str = choose_model()
-        self.max_ctx: int = ollama_client.get_max_ctx(self.model)
+        self.model: str = ""
+        self.max_ctx: int = 0
+        self.used_ctx: int = 0
         self.messages: list[dict] = []
         self.attachments: list[dict] = []
-        self.commands: CommandRegistry = build_default_registry(self)
+        self.commands: CommandRegistry = build_default_registry()
+        choose_model(self)
 
     def run(self) -> None:
-        print_welcome(self.model, self.max_ctx, os.getcwd())
-        console.print("[dim]comandos: /help | /sair | /arquivo <caminho> | /limpar[/dim]\n")
+        console.print("[dim]Use /help para ver todos os comandos disponíveis[/dim]\n")
 
         while True:
             try:
@@ -65,11 +66,11 @@ class ChatSession:
 
         if response:
             self.messages.append({"role": "assistant", "content": response})
+            self.used_ctx = stats.get("prompt_eval_count", 0) + stats.get("eval_count", 0)
             print_response(response)
-            print_stats(stats)
+            print_stats(stats, self.used_ctx, self.max_ctx)
         else:
             console.print("[red]sem resposta[/red]")
-        console.print()
 
     def add_attachment(self, path: str) -> None:
         att = load_attachment(path)

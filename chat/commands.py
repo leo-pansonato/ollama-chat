@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from .ui import console, print_help
+from .ui import console, print_help, choose_model
 
 if TYPE_CHECKING:
     from .session import ChatSession
-
 
 @dataclass
 class Command:
@@ -45,7 +44,7 @@ class CommandRegistry:
 # --- Handlers ---
 
 def handle_help(session: ChatSession, args: str) -> bool:
-    print_help()
+    print_help(session.commands._commands)
     return False
 
 
@@ -74,9 +73,18 @@ def handle_arquivo(session: ChatSession, args: str) -> bool:
     return False
 
 
+def handle_modelo(session: ChatSession, args: str) -> bool:
+    try:
+        choose_model(session)
+    except KeyboardInterrupt:
+        console.print("[dim]Operação cancelada.[/dim]\n")
+    return False
+
+
 # --- Factory ---
 
-def build_default_registry(session: ChatSession) -> CommandRegistry:
+
+def build_default_registry() -> CommandRegistry:
     registry = CommandRegistry()
     registry.register(Command(
         name="/help",
@@ -92,14 +100,20 @@ def build_default_registry(session: ChatSession) -> CommandRegistry:
     ))
     registry.register(Command(
         name="/limpar",
-        aliases=["limpar"],
-        description="Remove todos os anexos pendentes",
+        aliases=["/clear", "/detach"],
+        description="Desanexa todos os arquivos e imagens",
         handler=handle_clear,
     ))
     registry.register(Command(
         name="/arquivo",
-        aliases=["arquivo:"],
+        aliases=["/file"],
         description="Anexa um arquivo ou imagem",
         handler=handle_arquivo,
+    ))
+    registry.register(Command(
+        name="/modelo",
+        aliases=["/model"],
+        description="Troca de modelo (mantém o contexto)",
+        handler=handle_modelo,
     ))
     return registry

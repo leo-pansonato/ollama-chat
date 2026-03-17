@@ -27,9 +27,13 @@ def list_models() -> list[str]:
 def get_max_ctx(model: str) -> int:
     try:
         info = ollama.show(model)
-        for k, v in (getattr(info, "model_info", None) or {}).items():
+        for k, v in (getattr(info, "modelinfo", None) or {}).items():
             if "context_length" in k:
                 return int(v)
+        for line in (getattr(info, "parameters", "") or "").splitlines():
+            parts = line.split()
+            if parts and parts[0] == "num_ctx":
+                return int(parts[1])
     except Exception:
         pass
     return 131072
@@ -50,8 +54,7 @@ def stream_response(
     initial_grid = build_stream_grid(spinner_analisando, "", tip)
 
     with Live(initial_grid, console=console, refresh_per_second=12, transient=True) as live:
-        for part in ollama.chat(model=model, messages=messages,
-                                stream=True, options={"num_ctx": max_ctx}):
+        for part in ollama.chat(model=model, messages=messages, stream=True, options={"num_ctx": max_ctx}):
             while msvcrt.kbhit():
                 if msvcrt.getch() == b'\x1b':
                     return full, stats
