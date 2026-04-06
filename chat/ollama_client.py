@@ -20,6 +20,8 @@ def list_models() -> list[str]:
             else:
                 models.append(getattr(m, "model", getattr(m, "name", "")))
         return [m for m in models if m]
+    except ConnectionError:
+        raise
     except Exception:
         return []
 

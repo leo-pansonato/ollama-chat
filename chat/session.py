@@ -11,7 +11,7 @@ from .ui import (
     print_separator,
     print_stats,
     print_user_message,
-   #  print_welcome,
+    print_welcome,
 )
 
 
@@ -23,10 +23,10 @@ class ChatSession:
         self.messages: list[dict] = []
         self.attachments: list[dict] = []
         self.commands: CommandRegistry = build_default_registry()
+        print_welcome()
         choose_model(self)
 
     def run(self) -> None:
-        console.print("[dim]Use /help para ver todos os comandos disponíveis[/dim]\n")
 
         while True:
             try:
@@ -34,7 +34,7 @@ class ChatSession:
                 user_input = input_prompt(len(self.attachments))
                 print("\033[2A\033[J", end="", flush=True)
             except (EOFError, KeyboardInterrupt):
-                console.print("\n[dim]encerrado[/dim]")
+                console.print("\n[dim]Sessão encerrada[/dim]")
                 break
 
             if not user_input:

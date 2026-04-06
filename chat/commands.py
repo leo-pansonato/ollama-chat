@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
@@ -49,7 +50,7 @@ def handle_help(session: ChatSession, args: str) -> bool:
 
 
 def handle_exit(session: ChatSession, args: str) -> bool:
-    console.print("[dim]encerrado[/dim]")
+    console.print("[dim]Sessão encerrada[/dim]")
     return True
 
 
@@ -78,6 +79,17 @@ def handle_modelo(session: ChatSession, args: str) -> bool:
         choose_model(session)
     except KeyboardInterrupt:
         console.print("[dim]Operação cancelada.[/dim]\n")
+    return False
+
+
+def handle_copiar(session: ChatSession, args: str) -> bool:
+    for msg in reversed(session.messages):
+        if msg["role"] == "assistant":
+            text = msg["content"]
+            subprocess.run(["clip.exe"], input=text.encode("utf-8"), check=True)
+            console.print("[green]✓ Resposta copiada para a área de transferência.[/green]\n")
+            return False
+    console.print("[yellow]Nenhuma resposta para copiar.[/yellow]\n")
     return False
 
 
@@ -115,5 +127,11 @@ def build_default_registry() -> CommandRegistry:
         aliases=["/model"],
         description="Troca de modelo (mantém o contexto)",
         handler=handle_modelo,
+    ))
+    registry.register(Command(
+        name="/copiar",
+        aliases=["/copy"],
+        description="Copia a última resposta para a área de transferência",
+        handler=handle_copiar,
     ))
     return registry

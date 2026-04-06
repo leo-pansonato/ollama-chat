@@ -1,13 +1,22 @@
-# import os
+import os
+import sys
+from io import StringIO
 
+from prompt_toolkit import PromptSession
+from prompt_toolkit.history import FileHistory
+from prompt_toolkit.formatted_text import ANSI
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.padding import Padding
-# from rich.panel import Panel
+from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
+
+from chat import ollama_client
+
+__version__ = "1.0.0"
 
 PASTEL_THEME = Theme({
     "markdown.h1": "bold #8cacff",
@@ -22,7 +31,24 @@ PASTEL_THEME = Theme({
 
 console = Console(theme=PASTEL_THEME)
 
+_history_path = os.path.join(os.path.expanduser("~"), ".ollama-chat-history")
+_prompt_session = None
+
+
+def _get_prompt_session() -> PromptSession:
+    global _prompt_session
+    if _prompt_session is None:
+        _prompt_session = PromptSession(history=FileHistory(_history_path))
+    return _prompt_session
+
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
+
+
+def _render_rich_to_ansi(markup: str) -> str:
+    buf = StringIO()
+    temp = Console(file=buf, theme=PASTEL_THEME, force_terminal=True, no_color=False)
+    temp.print(markup, end="")
+    return buf.getvalue()
 
 
 def build_stream_grid(spinner: Spinner, partial_text: str, tip: Text) -> Table:
@@ -37,17 +63,18 @@ def build_stream_grid(spinner: Spinner, partial_text: str, tip: Text) -> Table:
     return grid
 
 
-# def print_welcome(model: str, max_ctx: int, cwd: str) -> None:
-#     console.print()
-#     console.print(Panel(
-#         f"[bold green]{model}[/bold green] · [dim]{max_ctx:,} tokens[/dim]\n"
-#         f"[dim]{cwd}[/dim]",
-#         title="[bold]Ollama Chat[/bold]",
-#         border_style="cyan",
-#         padding=(1, 4),
-#         expand=True,
-#     ))
-#     console.print()
+def print_welcome() -> None:
+    console.print()
+    console.print(Panel(
+        "[bold cyan]Ollama Chat[/bold cyan]  "
+        f"[dim]v{__version__}[/dim]\n\n"
+        "[dim]Chat interativo com modelos locais Ollama[/dim]\n"
+        "[dim]Use /help para ver todos os comandos[/dim]",
+        border_style="cyan",
+        padding=(1, 4),
+        expand=True,
+    ))
+    console.print()
 
 
 def print_help(commands=None) -> None:
@@ -64,19 +91,12 @@ def print_stats(stats: dict, used: int = 0, total: int = 0) -> None:
     ev = stats.get("eval_duration", 0) / 1e9
     tps = stats.get("eval_count", 0) / ev if ev else 0
     left = Text(f"{tps:.1f} t/s · {dur:.1f}s · {used:,}/{total:,}", style="dim")
-   #  if total:
-   #      right = Text(f"tokens {used:,}/{total:,}", style="dim")
-   #      grid = Table.grid(expand=True)
-   #      grid.add_column()
-   #      grid.add_column(justify="right")
-   #      grid.add_row(left, right)
-   #      console.print(grid)
-   #  else:
     console.print(left)
 
 
 def print_response(response: str) -> None:
     console.print(Markdown(response))
+    console.print("[dim]/copiar[/dim]")
     console.print()
 
 
@@ -87,10 +107,11 @@ def print_separator() -> None:
 def input_prompt(n_attachments: int) -> str:
     if n_attachments:
         n = n_attachments
-        prefix = f"[dim]({n} anexo{'s' if n > 1 else ''})[/dim] [bold cyan]>[/bold cyan] "
+        markup = f"[dim]({n} anexo{'s' if n > 1 else ''})[/dim] [bold cyan]>[/bold cyan] "
     else:
-        prefix = "  [bold cyan]>[/bold cyan] "
-    return console.input(prefix).strip()
+        markup = "  [bold cyan]>[/bold cyan] "
+    ansi_prefix = _render_rich_to_ansi(markup)
+    return _get_prompt_session().prompt(ANSI(ansi_prefix)).strip()
 
 
 def print_user_message(text: str) -> None:
@@ -105,11 +126,23 @@ def choose_model(session) -> str:
     import msvcrt
     from rich.live import Live
 
-    models = ollama_client.list_models()
+    try:
+      models = ollama_client.list_models()
+    except ConnectionError:
+      console.print(
+            "\n[bold red]Erro:[/bold red] Não foi possível conectar ao Ollama.\n"
+            "Verifique se o Ollama está instalado e em execução.\n"
+            "Download: [link=https://ollama.com/download]https://ollama.com/download[/link]\n"
+      )
+      sys.exit(1)
 
     if not models:
-        console.print("[yellow]Nenhum modelo encontrado. (Os modelos só aparecem se forem instalados através do 'ollama pull')[/yellow]")
-        return console.input("  [cyan]Modelo[/cyan] [dim](gemma3:4b)[/dim]: ").strip() or "gemma3:4b"
+      console.print(
+            "\n[bold red]Erro:[/bold red] Nenhum modelo instalado no Ollama.\n"
+            "Instale um modelo com: [bold cyan]ollama pull <modelo>[/bold cyan]\n"
+            "Exemplo: [dim]ollama pull gemma3:4b[/dim]\n"
+      )
+      sys.exit(1)
 
     idx = 0
     with Live(console=console, auto_refresh=False, transient=True) as live:
